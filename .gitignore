@@ -1,0 +1,29 @@
+# Node backend
+node_modules/
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+dist/
+build/
+.env
+.env.local
+.env.*.local
+
+# Chrome Extension
+*.pem
+*.crx
+*.zip
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+debug.log
+
+# Editor junk
+.vscode/
+.idea/
+*.swp
