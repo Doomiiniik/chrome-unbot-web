@@ -1,5 +1,8 @@
 console.log("POPUP JS LOADED");
 
+// ----------------------
+// TEST: WebRTC
+// ----------------------
 async function testWebRTC() {
   try {
     const pc = new RTCPeerConnection({ iceServers: [] });
@@ -20,6 +23,9 @@ async function testWebRTC() {
   }
 }
 
+// ----------------------
+// TEST: Canvas
+// ----------------------
 function testCanvas() {
   try {
     const canvas = document.createElement("canvas");
@@ -37,6 +43,9 @@ function testCanvas() {
   }
 }
 
+// ----------------------
+// TEST: AudioContext
+// ----------------------
 async function testAudioContext() {
   try {
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
@@ -55,32 +64,77 @@ async function testAudioContext() {
   }
 }
 
+// ----------------------
+// TEST: Known Extensions
+// ----------------------
 async function detectExtensions() {
-  const knownExtensions = [
-    "cjpalhdlnbpafiamejdnhcphjbkeiagm", // uBlock
-    "gighmmpiobklfepjocnamgkkbiglidom", // Adblock
-    "aapbdbdomjkkjkaonfhkkikfgjllcleb"  // Google Translate (przykład)
-  ];
-  let count = 0;
-  const checks = knownExtensions.map(id =>
-    fetch(`chrome-extension://${id}/manifest.json`)
-      .then(res => { if (res.ok) count++; })
-      .catch(() => {})
-  );
-  await Promise.all(checks);
-  return count;
+  return { count: 0 };
 }
 
+// ----------------------
+// TEST: Incognito
+// ----------------------
 async function detectIncognito() {
   try { return chrome.extension.inIncognitoContext === true; }
   catch (e) { return false; }
 }
 
-async function collectFingerprintPopup() {
+// ----------------------
+// TEST: WebGL
+// ----------------------
+function testWebGL() {
+  try {
+    const canvas = document.createElement("canvas");
+    const gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
+    if (!gl) return { status: "blocked" };
+
+    const debugInfo = gl.getExtension("WEBGL_debug_renderer_info");
+
+    const vendor = debugInfo 
+      ? gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL)
+      : "unknown";
+
+    const renderer = debugInfo 
+      ? gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL)
+      : "unknown";
+
+    return {
+      status: "ok",
+      vendor,
+      renderer
+    };
+  } catch (e) {
+    return { status: "blocked" };
+  }
+}
+
+// ----------------------
+// COLLECT FINGERPRINT
+// ----------------------
+async function collectFingerprint() {
+  console.log("SCAN CLICKED");
+
   const webrtcStatus = await testWebRTC();
   const canvasStatus = testCanvas();
   const audioStatus = await testAudioContext();
   const extCount = await detectExtensions();
+
+  const navigatorEntropy = {
+    webdriver: navigator.webdriver === true,
+    plugins_count: navigator.plugins ? navigator.plugins.length : 0,
+    mimetypes_count: navigator.mimeTypes ? navigator.mimeTypes.length : 0,
+    max_touch_points: navigator.maxTouchPoints || 0
+  };
+
+  const screenFingerprint = {
+    screen_width: window.screen.width,
+    screen_height: window.screen.height,
+    avail_width: window.screen.availWidth,
+    avail_height: window.screen.availHeight,
+    inner_width: window.innerWidth,
+    inner_height: window.innerHeight,
+    device_pixel_ratio: window.devicePixelRatio || 1
+  };
 
   return {
     user_agent: navigator.userAgent,
@@ -94,32 +148,74 @@ async function collectFingerprintPopup() {
     incognito_only: await detectIncognito(),
     hardware_concurrency: navigator.hardwareConcurrency,
     device_memory: navigator.deviceMemory || 0,
+    webgl: testWebGL(),
+    navigator_entropy: navigatorEntropy,
+    screen_fingerprint: screenFingerprint,
     ip: "backend"
   };
 }
+async function collectFingerprintPopup() {
+  console.log("SCAN CLICKED");
 
-document.addEventListener("DOMContentLoaded", () => {
-  const out = document.getElementById("output");
+  const fp = await collectFingerprint();
 
-  chrome.storage.local.get("backend_result", (res) => {
-    if (!res.backend_result) {
-      out.textContent = "Brak danych";
-      return;
-    }
-    out.textContent = JSON.stringify(res.backend_result, null, 2);
-  });
+  console.log("sending message to background");
 
-  document.getElementById("scan").addEventListener("click", async () => {
-    out.textContent = "Zbieram fingerprint...";
-    try {
-      const fp = await collectFingerprintPopup();
-      console.log("FP z popup:", fp);
-      chrome.runtime.sendMessage({ action: "scan", data: fp }, (resp) => {
-        console.log("sendMessage callback:", resp);
+  chrome.runtime.sendMessage(
+    { action: "scan", data: fp },
+    (response) => {
+      console.log("response from background:", response);
+
+      chrome.storage.local.get("backend_result", (res) => {
+        if (res.backend_result) {
+          renderUI(res.backend_result);
+        }
       });
-    } catch (e) {
-      console.error("Błąd zbierania fingerprintu:", e);
-      out.textContent = "Błąd zbierania fingerprintu";
     }
+  );
+}
+
+// ----------------------
+// RENDER UI
+// ----------------------
+function renderUI(data) {
+  const scoreBox = document.getElementById("scoreBox");
+  const reasonsList = document.getElementById("reasons");
+  const fixesList = document.getElementById("fixes");
+  const metaBox = document.getElementById("meta");
+
+  // SCORE
+  scoreBox.textContent = data.score;
+
+  if (data.score <= 30) scoreBox.style.color = "#4caf50";
+  else if (data.score <= 60) scoreBox.style.color = "#ff9800";
+  else scoreBox.style.color = "#f44336";
+
+  // REASONS
+  reasonsList.innerHTML = "";
+  data.reasons.forEach(r => {
+    const li = document.createElement("li");
+    li.innerHTML = `⚠️ ${r}`;
+    li.style.marginBottom = "4px";
+    reasonsList.appendChild(li);
   });
+
+  // FIXES
+  fixesList.innerHTML = "";
+  data.fixes_preview.forEach(f => {
+    const li = document.createElement("li");
+    li.innerHTML = `✔️ ${f}`;
+    li.style.marginBottom = "4px";
+    fixesList.appendChild(li);
+  });
+
+  // META
+  metaBox.textContent = `IP: ${data.ip}`;
+}
+
+// ----------------------
+// BUTTON HANDLER
+// ----------------------
+document.getElementById("scan").addEventListener("click", () => {
+  collectFingerprintPopup();
 });

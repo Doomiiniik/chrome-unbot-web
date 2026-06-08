@@ -1,27 +1,24 @@
 console.log("Chrome Unbot extension loaded");
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-  if (msg.action === "scan") {
-    console.log("Message received in background, wysyłam do backendu");
-    const fp = msg.data;
+  console.log("Message received in background, send to backendu");
 
-    fetch("http://localhost:3000/analyze", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(fp)
-    })
-      .then(res => res.json())
-      .then(data => {
-        console.log("Odpowiedź backendu:", data);
-        chrome.storage.local.set({ backend_result: data }, () => {
-          sendResponse({ ok: true });
-        });
-      })
-      .catch(err => {
-        console.error("Backend error:", err);
-        sendResponse({ ok: false, error: String(err) });
-      });
+  fetch("https://localhost:3000/analyze", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(msg.data)
+  })
+  .then(r => r.json())
+  .then(data => {
+    chrome.storage.local.set({ backend_result: data }, () => {
+      console.log("Result saved to storage");
+      sendResponse({ ok: true });
+    });
+  })
+  .catch(err => {
+    console.error("Backend error:", err);
+    sendResponse({ ok: false, error: err.toString() });
+  });
 
-    return true; // async response
-  }
+  return true; // <-- KLUCZOWE, ale musi być NA KOŃCU listenera
 });
