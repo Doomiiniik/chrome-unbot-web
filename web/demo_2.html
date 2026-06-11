@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Chrome Unbot — Web Demo PRO</title>
+  <style>
+    body {
+      font-family: Inter, Arial, sans-serif;
+      background: #0f1115;
+      margin: 0;
+      padding: 40px;
+      color: #e5e7eb;
+    }
+
+    h1 {
+      font-size: 34px;
+      margin-bottom: 10px;
+      font-weight: 800;
+      background: linear-gradient(90deg, #4f9cff, #7f5bff);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    #scan {
+      background: linear-gradient(90deg, #4f9cff, #7f5bff);
+      color: white;
+      border: none;
+      padding: 14px 22px;
+      font-size: 16px;
+      border-radius: 10px;
+      cursor: pointer;
+      margin-top: 10px;
+      font-weight: 600;
+    }
+
+    #scan:hover {
+      opacity: 0.9;
+    }
+
+    .card {
+      background: #1a1d23;
+      padding: 24px;
+      border-radius: 14px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+      margin-top: 30px;
+      border: 1px solid #2a2f38;
+    }
+
+    .score-box {
+      font-size: 64px;
+      font-weight: 900;
+      text-align: center;
+      margin-bottom: 10px;
+      background: linear-gradient(90deg, #4f9cff, #7f5bff);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .section-title {
+      font-size: 20px;
+      font-weight: 700;
+      margin-top: 25px;
+      margin-bottom: 8px;
+      color: #9ca3af;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    ul {
+      padding-left: 20px;
+      margin-top: 5px;
+    }
+
+    li {
+      margin-bottom: 8px;
+      font-size: 15px;
+      line-height: 1.4;
+    }
+
+    .warn {
+      color: #ff5f5f;
+      font-weight: 700;
+    }
+
+    .ok {
+      color: #4fdd7f;
+      font-weight: 700;
+    }
+
+    pre {
+      background: #111317;
+      padding: 14px;
+      border-radius: 10px;
+      overflow-x: auto;
+      border: 1px solid #2a2f38;
+      color: #9ca3af;
+      font-size: 13px;
+    }
+
+    .loading {
+      text-align: center;
+      margin-top: 20px;
+      font-size: 16px;
+      opacity: 0.8;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Chrome Unbot — Web Demo PRO</h1>
+  <p>Advanced browser fingerprint analysis (web‑only version).</p>
+
+  <button id="scan">Run full scan</button>
+
+  <div id="loading" class="loading" style="display:none;">
+    🔍 Scanning your browser…
+  </div>
+
+  <div id="result" class="card" style="display:none;">
+    <div class="score-box" id="scoreBox">0</div>
+
+    <div class="section-title">Risk Factors</div>
+    <ul id="reasonsList"></ul>
+
+    <div class="section-title">Recommended Fixes</div>
+    <ul id="fixesList"></ul>
+
+    <div class="section-title">Raw Fingerprint</div>
+    <pre id="raw"></pre>
+  </div>
+
+  <script>
+    const safe = (fn, fallback) => { try { return fn(); } catch { return fallback; } };
+
+    async function detectWebRTC() {
+      try {
+        const pc = new RTCPeerConnection({ iceServers: [] });
+        pc.createDataChannel("");
+        const offer = await pc.createOffer();
+        pc.close();
+        return offer.sdp.includes("candidate") ? "enabled" : "disabled";
+      } catch {
+        return "disabled";
+      }
+    }
+
+    function detectCanvas() {
+      try {
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d");
+        ctx.fillText("test", 10, 10);
+        const data = canvas.toDataURL();
+        return data.length < 50 ? "blocked" : "ok";
+      } catch {
+        return "blocked";
+      }
+    }
+
+    function detectAudioContext() {
+      try {
+        const Ctx = window.AudioContext || window.webkitAudioContext;
+        const ctx = new Ctx();
+        ctx.close();
+        return "ok";
+      } catch {
+        return "blocked";
+      }
+    }
+
+    async function collectFingerprint() {
+      return {
+        user_agent: navigator.userAgent,
+        platform: navigator.platform,
+        hardware_concurrency: navigator.hardwareConcurrency,
+        device_memory: navigator.deviceMemory,
+        webgl: (() => {
+          try {
+            const canvas = document.createElement("canvas");
+            const gl = canvas.getContext("webgl");
+            if (!gl) return { status: "blocked" };
+            return {
+              status: "ok",
+              vendor: gl.getParameter(gl.VENDOR),
+              renderer: gl.getParameter(gl.RENDERER)
+            };
+          } catch {
+            return { status: "blocked" };
+          }
+        })(),
+        navigator_entropy: {
+          plugins_count: safe(() => navigator.plugins.length, 0),
+          mimetypes_count: safe(() => navigator.mimeTypes.length, 0),
+          webdriver: navigator.webdriver
+        },
+        webrtc: await detectWebRTC(),
+        canvas: detectCanvas(),
+        audiocontext: detectAudioContext()
+      };
+    }
+
+    async function runScan() {
+      document.getElementById("loading").style.display = "block";
+      document.getElementById("result").style.display = "none";
+
+      const fp = await collectFingerprint();
+
+      const res = await fetch("/analyze-web", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(fp)
+      });
+
+      const data = await res.json();
+
+      document.getElementById("loading").style.display = "none";
+      document.getElementById("result").style.display = "block";
+
+      document.getElementById("scoreBox").textContent = data.score;
+
+      const reasonsList = document.getElementById("reasonsList");
+      reasonsList.innerHTML = "";
+      data.reasons.forEach(r => {
+        const li = document.createElement("li");
+        li.innerHTML = `<span class="warn">⚠️</span> ${r}`;
+        reasonsList.appendChild(li);
+      });
+
+      const fixesList = document.getElementById("fixesList");
+      fixesList.innerHTML = "";
+      data.fixes_preview.forEach(f => {
+        const li = document.createElement("li");
+        li.innerHTML = `<span class="ok">✔️</span> ${f}`;
+        fixesList.appendChild(li);
+      });
+
+      document.getElementById("raw").textContent =
+        JSON.stringify({ fp, data }, null, 2);
+    }
+
+    document.getElementById("scan").onclick = runScan;
+  </script>
+
+</body>
+</html>

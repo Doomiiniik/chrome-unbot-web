@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Chrome Unbot — Web Demo</title>
+  <style>
+    body {
+      font-family: Inter, Arial, sans-serif;
+      background: #0f1115;
+      margin: 0;
+      padding: 40px;
+      color: #e5e7eb;
+    }
+
+    h1 {
+      font-size: 34px;
+      margin-bottom: 10px;
+      font-weight: 800;
+      background: linear-gradient(90deg, #4f9cff, #7f5bff);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    p {
+      margin: 0 0 16px;
+      color: #9ca3af;
+    }
+
+    #scan {
+      background: linear-gradient(90deg, #4f9cff, #7f5bff);
+      color: white;
+      border: none;
+      padding: 14px 22px;
+      font-size: 16px;
+      border-radius: 10px;
+      cursor: pointer;
+      margin-top: 10px;
+      font-weight: 600;
+    }
+
+    #scan:hover {
+      opacity: 0.9;
+    }
+
+    .card {
+      background: #1a1d23;
+      padding: 24px;
+      border-radius: 14px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+      margin-top: 30px;
+      border: 1px solid #2a2f38;
+    }
+
+    .score-label {
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #9ca3af;
+      margin-bottom: 4px;
+    }
+
+    .score-value {
+      font-size: 40px;
+      font-weight: 900;
+      margin-bottom: 16px;
+      background: linear-gradient(90deg, #4f9cff, #7f5bff);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .risk-bar-wrapper {
+      margin-bottom: 20px;
+    }
+
+    .risk-bar-bg {
+      width: 100%;
+      height: 14px;
+      border-radius: 999px;
+      background: linear-gradient(90deg, #22c55e, #facc15, #f97316, #ef4444, #a855f7);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .risk-bar-fill {
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 0%;
+      background: rgba(15,17,21,0.4);
+      border-radius: 999px;
+      transition: width 0.4s ease;
+    }
+
+    .risk-text {
+      margin-top: 6px;
+      font-size: 13px;
+      color: #9ca3af;
+    }
+
+    .section-title {
+      font-size: 16px;
+      font-weight: 700;
+      margin-top: 18px;
+      margin-bottom: 8px;
+      color: #e5e7eb;
+    }
+
+    ul {
+      padding-left: 20px;
+      margin-top: 5px;
+    }
+
+    li {
+      margin-bottom: 8px;
+      font-size: 14px;
+      line-height: 1.4;
+    }
+
+    .warn {
+      color: #ff5f5f;
+      font-weight: 700;
+      margin-right: 6px;
+    }
+
+    .ok {
+      color: #4fdd7f;
+      font-weight: 700;
+      margin-right: 6px;
+    }
+
+    .loading {
+      text-align: left;
+      margin-top: 12px;
+      font-size: 14px;
+      opacity: 0.8;
+      color: #9ca3af;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Chrome Unbot — Web Demo</h1>
+  <p>See how “bot‑like” your browser fingerprint looks to anti‑fraud systems.</p>
+
+  <button id="scan">Scan my browser</button>
+  <div id="loading" class="loading" style="display:none;">
+    🔍 Scanning your browser…
+  </div>
+
+  <div id="result" class="card" style="display:none;">
+    <div class="score-label">Bot‑likeness score</div>
+    <div class="score-value" id="scoreValue">0</div>
+
+    <div class="risk-bar-wrapper">
+      <div class="risk-bar-bg">
+        <div class="risk-bar-fill" id="riskFill"></div>
+      </div>
+      <div class="risk-text" id="riskText">Your browser looks very human‑like.</div>
+    </div>
+
+    <div class="section-title">Risk factors</div>
+    <ul id="reasonsList"></ul>
+
+    <div class="section-title">Recommended fixes</div>
+    <ul id="fixesList"></ul>
+  </div>
+
+  <script>
+    const safe = (fn, fallback) => { try { return fn(); } catch { return fallback; } };
+
+    async function detectWebRTC() {
+      try {
+        const pc = new RTCPeerConnection({ iceServers: [] });
+        pc.createDataChannel("");
+        const offer = await pc.createOffer();
+        pc.close();
+        return offer.sdp.includes("candidate") ? "enabled" : "disabled";
+      } catch {
+        return "disabled";
+      }
+    }
+
+    function detectCanvas() {
+      try {
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d");
+        ctx.fillText("test", 10, 10);
+        const data = canvas.toDataURL();
+        return data.length < 50 ? "blocked" : "ok";
+      } catch {
+        return "blocked";
+      }
+    }
+
+    function detectAudioContext() {
+      try {
+        const Ctx = window.AudioContext || window.webkitAudioContext;
+        const ctx = new Ctx();
+        ctx.close();
+        return "ok";
+      } catch {
+        return "blocked";
+      }
+    }
+
+    async function collectFingerprint() {
+      return {
+        user_agent: navigator.userAgent,
+        platform: navigator.platform,
+        hardware_concurrency: navigator.hardwareConcurrency,
+        device_memory: navigator.deviceMemory,
+        webgl: (() => {
+          try {
+            const canvas = document.createElement("canvas");
+            const gl = canvas.getContext("webgl");
+            if (!gl) return { status: "blocked" };
+            return {
+              status: "ok",
+              vendor: gl.getParameter(gl.VENDOR),
+              renderer: gl.getParameter(gl.RENDERER)
+            };
+          } catch {
+            return { status: "blocked" };
+          }
+        })(),
+        navigator_entropy: {
+          plugins_count: safe(() => navigator.plugins.length, 0),
+          mimetypes_count: safe(() => navigator.mimeTypes.length, 0),
+          webdriver: navigator.webdriver
+        },
+        webrtc: await detectWebRTC(),
+        canvas: detectCanvas(),
+        audiocontext: detectAudioContext()
+      };
+    }
+
+    function riskLabel(score) {
+      if (score <= 10) return "Your browser looks very human‑like.";
+      if (score <= 30) return "Some signals look slightly hardened or privacy‑tuned.";
+      if (score <= 60) return "Multiple signals look bot‑like or automation‑adjacent.";
+      if (score <= 80) return "High bot‑likeness — many anti‑fraud systems will flag this.";
+      return "Extreme bot‑likeness — this profile screams automation.";
+    }
+
+    async function runScan() {
+      document.getElementById("loading").style.display = "block";
+      document.getElementById("result").style.display = "none";
+
+      const fp = await collectFingerprint();
+
+      const res = await fetch("/analyze-web", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(fp)
+      });
+
+      const data = await res.json();
+
+      document.getElementById("loading").style.display = "none";
+      document.getElementById("result").style.display = "block";
+
+      const score = data.score || 0;
+      document.getElementById("scoreValue").textContent = score;
+
+      const fill = document.getElementById("riskFill");
+      fill.style.width = `${score}%`;
+
+      document.getElementById("riskText").textContent = riskLabel(score);
+
+      const reasonsList = document.getElementById("reasonsList");
+      reasonsList.innerHTML = "";
+      (data.reasons || []).forEach(r => {
+        const li = document.createElement("li");
+        li.innerHTML = `<span class="warn">⚠️</span>${r}`;
+        reasonsList.appendChild(li);
+      });
+
+      const fixesList = document.getElementById("fixesList");
+      fixesList.innerHTML = "";
+      (data.fixes_preview || []).forEach(f => {
+        const li = document.createElement("li");
+        li.innerHTML = `<span class="ok">✔️</span>${f}`;
+        fixesList.appendChild(li);
+      });
+    }
+
+    document.getElementById("scan").onclick = runScan;
+  </script>
+
+</body>
+</html>
