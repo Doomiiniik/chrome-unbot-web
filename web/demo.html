@@ -169,17 +169,35 @@
   <script>
     const safe = (fn, fallback) => { try { return fn(); } catch { return fallback; } };
 
-    async function detectWebRTC() {
-      try {
-        const pc = new RTCPeerConnection({ iceServers: [] });
-        pc.createDataChannel("");
-        const offer = await pc.createOffer();
+   async function detectWebRTC() {
+    try {
+    const pc = new RTCPeerConnection({ iceServers: [] });
+    pc.createDataChannel("");
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+
+    return await new Promise(resolve => {
+      const timer = setTimeout(() => {
+        resolve("disabled");    
         pc.close();
-        return offer.sdp.includes("candidate") ? "enabled" : "disabled";
-      } catch {
-        return "disabled";
-      }
-    }
+      }, 1000);
+
+      pc.onicecandidate = (e) => {
+        if (e.candidate) {   
+          clearTimeout(timer);
+          resolve("enabled");       
+          pc.close();
+        }
+      };
+    });
+  } catch {
+    return "disabled";
+  }
+}
+
+
+
+
 
     function detectCanvas() {
       try {
