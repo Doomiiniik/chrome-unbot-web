@@ -69,6 +69,29 @@ function analyzeFingerprint(fp = {}, clientIp = null) {
     reasons.push("No plugins or mimeTypes");
     fixes.push("Avoid hardened profiles");
   }
+ 
+  if (fp.navigator_entropy?.webdriver === true) {
+    score += 50;
+    reasons.push("Browser is controlled by automation");
+    fixes.push("Use a normal browser, not an automated one");
+  }
+
+  if (fp.user_agent?.includes("HeadlessChrome")) {
+    score += 50;
+    reasons.push("Browser works in headless mode");
+    fixes.push("Use normal browser mode");
+  }
+
+
+
+
+
+
+
+
+
+
+
 
   if (score > 100) score = 100;
 
