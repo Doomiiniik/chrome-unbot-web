@@ -28,3 +28,5 @@ debug.log
 .idea/
 *.swp
 node_modules/
+# Database
+scans.db

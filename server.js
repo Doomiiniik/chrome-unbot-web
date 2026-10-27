@@ -2,6 +2,27 @@
 const express = require("express");
 const path = require("path");
 
+const Database = require("better-sqlite3");
+const db = new Database("scans.db");   // otwórz plik bazy (jeśli go nie ma, utworzy)
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS scans (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at TEXT NOT NULL,
+    score INTEGER NOT NULL,
+    user_agent TEXT
+  )
+`);
+
+const insertScan = db.prepare(
+  "INSERT INTO scans (created_at, score, user_agent) VALUES (?, ?, ?)"
+);
+
+
+
+
+
+
 const app = express();
 app.set("trust proxy", 1);
 
@@ -112,6 +133,7 @@ app.post("/analyze-web", (req, res) => {
   console.log("POST /analyze-web");
   const fp = req.body || {};
   const result = analyzeFingerprint(fp, req.ip);
+  insertScan.run(new Date().toISOString(), result.score, req.get("User-Agent"));
   res.json(result);
 });
 
