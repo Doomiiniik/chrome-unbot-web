@@ -287,18 +287,18 @@
       document.getElementById("riskText").textContent = riskLabel(score);
 
       const reasonsList = document.getElementById("reasonsList");
-      reasonsList.innerHTML = "";
+      reasonsList.textContent = "";
       (data.reasons || []).forEach(r => {
         const li = document.createElement("li");
-        li.innerHTML = `<span class="warn">⚠️</span>${r}`;
+        li.textContent = `⚠️ ${r}`;
         reasonsList.appendChild(li);
       });
 
       const fixesList = document.getElementById("fixesList");
-      fixesList.innerHTML = "";
+      fixesList.textContent = "";
       (data.fixes_preview || []).forEach(f => {
         const li = document.createElement("li");
-        li.innerHTML = `<span class="ok">✔️</span>${f}`;
+        li.textContent = `✔️ ${f}`;
         fixesList.appendChild(li);
       });
     }

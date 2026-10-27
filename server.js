@@ -3,6 +3,7 @@ const express = require("express");
 const path = require("path");
 
 const app = express();
+app.set("trust proxy", 1);
 
 // CORS
 app.use((req, res, next) => {
@@ -110,14 +111,15 @@ function analyzeFingerprint(fp = {}, clientIp = null) {
 app.post("/analyze-web", (req, res) => {
   console.log("POST /analyze-web");
   const fp = req.body || {};
-  const result = analyzeFingerprint(fp, null);
+  const result = analyzeFingerprint(fp, req.ip);
   res.json(result);
 });
 
 // ----------------------
 // START SERVER
 // ----------------------
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;   // weź z env, a jak nie ma → 3000
+
 app.listen(PORT, () => {
   console.log(`Server running at http://localhost:${PORT}`);
 });
