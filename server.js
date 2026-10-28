@@ -19,7 +19,13 @@ const insertScan = db.prepare(
 );
 
 
-
+const statsQuery = db.prepare(`
+  SELECT
+    COUNT(*) AS total,
+    ROUND(AVG(score),1) AS avg_score,
+    SUM(score >= 50) AS likely_bots
+  FROM scans
+`);
 
 
 
@@ -35,15 +41,34 @@ app.use((req, res, next) => {
   next();
 });
 
-// JSON parser
-app.use(express.json());
+// JSON parser with limit
+app.use(express.json({ limit: "10kb" }));
 
 // Serwujemy folder web/
 app.use(express.static(path.join(__dirname, "web")));
 
-// ----------------------
-// ANALYZE FUNCTION
-// ----------------------
+function validateFingerprint(fp) {
+  if (typeof fp !== "object" || fp === null || Array.isArray(fp)) {
+    return "Body must be a JSON object";
+  }
+
+  if (fp.hardware_concurrency !== undefined &&
+      typeof fp.hardware_concurrency !== "number") {        
+    return "hardware_concurrency must be a number";
+  }
+
+  if (fp.user_agent !== undefined &&
+      (typeof fp.user_agent !== "string" || fp.user_agent.length > 500)) {  
+    return "user_agent must be a string up to 500 chars";
+  }
+
+  if (fp.device_memory !== undefined &&
+      (typeof fp.device_memory !== "number" )) { 
+    return "device_memory must be a number";
+  }
+  return null;
+}
+
 function analyzeFingerprint(fp = {}, clientIp = null) {
   let score = 0;
   let reasons = [];
@@ -132,10 +157,24 @@ function analyzeFingerprint(fp = {}, clientIp = null) {
 app.post("/analyze-web", (req, res) => {
   console.log("POST /analyze-web");
   const fp = req.body || {};
+  const error = validateFingerprint(fp);
+   if (error) {
+      return res.status(400).json({ error });  
+      }
+
   const result = analyzeFingerprint(fp, req.ip);
   insertScan.run(new Date().toISOString(), result.score, req.get("User-Agent"));
   res.json(result);
 });
+
+
+app.get("/stats", (req, res) => {
+  const stats = statsQuery.get();
+  res.json(stats);
+});
+
+
+
 
 // ----------------------
 // START SERVER
