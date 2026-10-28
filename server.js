@@ -3,6 +3,7 @@ const express = require("express");
 const path = require("path");
 
 const Database = require("better-sqlite3");
+const rateLimit = require("express-rate-limit");
 const db = new Database("scans.db");   // otwórz plik bazy (jeśli go nie ma, utworzy)
 
 db.exec(`
@@ -154,6 +155,14 @@ function analyzeFingerprint(fp = {}, clientIp = null) {
 // ----------------------
 // ENDPOINTS
 // ----------------------
+const limiter = rateLimit({
+  windowMs: 60* 1000,  
+  limit: 10,      
+});
+
+app.use("/analyze-web", limiter);
+
+
 app.post("/analyze-web", (req, res) => {
   console.log("POST /analyze-web");
   const fp = req.body || {};
