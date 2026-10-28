@@ -70,10 +70,18 @@ function validateFingerprint(fp) {
   return null;
 }
 
-function analyzeFingerprint(fp = {}, clientIp = null) {
+function analyzeFingerprint(fp = {}, clientIp = null, headerUA = null) {
   let score = 0;
   let reasons = [];
   let fixes = [];
+
+ if (fp.user_agent && headerUA && fp.user_agent !== headerUA) {
+    score+=40;
+    reasons.push("User-Agent header doesn't match fingerprint");
+    fixes.push("Disable User-Agent spoofing extensions");
+  }
+
+
 
   if (fp.webrtc === "disabled") {
     score += 20;
@@ -170,8 +178,8 @@ app.post("/analyze-web", (req, res) => {
    if (error) {
       return res.status(400).json({ error });  
       }
-
-  const result = analyzeFingerprint(fp, req.ip);
+  headerUA = req.get("User-Agent");
+  const result = analyzeFingerprint(fp, req.ip, headerUA);
   insertScan.run(new Date().toISOString(), result.score, req.get("User-Agent"));
   res.json(result);
 });
